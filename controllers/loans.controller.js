@@ -71,7 +71,8 @@ export const returnTool = async (req, res) => {
       return res.status(403).json({ success: false, message: 'No autorizado para devolver esta herramienta' });
     }
 
-    if (loan.status !== 'active') {
+    // Nueva validación para evitar devolver herramientas ya devueltas
+    if (loan.status === 'returned') {
       return res.status(400).json({ success: false, message: 'Esta herramienta ya ha sido devuelta' });
     }
 
@@ -84,5 +85,21 @@ export const returnTool = async (req, res) => {
     res.status(200).json({ success: true, data: loan });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error al devolver herramienta', error: error.message });
+  }
+};
+
+export const getMyLoans = async (req, res) => {
+  try {
+    const loans = await Loan.find({
+      technician: req.user._id,
+      status: 'active' // Asegurar que solo se devuelvan préstamos activos
+    }).populate({
+      path: 'tool',
+      select: 'name category serialNumber status'
+    });
+
+    res.status(200).json({ success: true, count: loans.length, data: loans });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error al obtener herramientas prestadas', error: error.message });
   }
 };

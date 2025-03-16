@@ -10,6 +10,8 @@ import {
 
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
+router.put('/reset-database', protect, authorize('admin'), resetDatabase); // Comentar despues de resetear herramientas a disponibles
+
 const router = express.Router();
 
 // Ruta de prueba
