@@ -1,19 +1,19 @@
 import Tool from '../models/Tool.js';
 import Loan from '../models/Loan.js';
 
-export const resetDatabase = async (req, res) => {
-  try {
-    // Resetear herramientas a "available"
-    await Tool.updateMany({}, { status: 'available' });
+// export const resetDatabase = async (req, res) => {
+//   try {
+//     // Resetear herramientas a "available"
+//     await Tool.updateMany({}, { status: 'available' });
 
-    // Resetear préstamos a "returned"
-    await Loan.updateMany({}, { status: 'returned', actualReturn: Date.now() });
+//     // Resetear préstamos a "returned"
+//     await Loan.updateMany({}, { status: 'returned', actualReturn: Date.now() });
 
-    res.status(200).json({ success: true, message: 'Base de datos reseteada correctamente.' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Error al resetear la base de datos.', error: error.message });
-  }
-};
+//     res.status(200).json({ success: true, message: 'Base de datos reseteada correctamente.' });
+//   } catch (error) {
+//     res.status(500).json({ success: false, message: 'Error al resetear la base de datos.', error: error.message });
+//   }
+// };
 
 // Obtener todas las herramientas
 export const getTools = async (req, res) => {
