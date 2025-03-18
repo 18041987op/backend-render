@@ -46,17 +46,52 @@ export const createLoan = async (req, res) => {
       return res.status(403).json({ success: false, message: 'No autorizado' });
     }
 
-    const { tool, purpose } = req.body;
+    // Extraer datos de la solicitud
+    const { tool, purpose, expectedReturn, loanDuration } = req.body;
+    
+    // Calcular la fecha de devolución esperada
+    let calculatedExpectedReturn;
+    
+    // Si se proporciona una fecha explícita, utilizarla
+    if (expectedReturn) {
+      calculatedExpectedReturn = new Date(expectedReturn);
+    } 
+    // Si se proporciona una duración (en formato "1h", "2d", etc.), calcular la fecha
+    else if (loanDuration) {
+      calculatedExpectedReturn = new Date();
+      
+      // Analizar la duración: formato esperado como "5h" (5 horas) o "3d" (3 días)
+      const unit = loanDuration.slice(-1); // Obtener última letra (h o d)
+      const value = parseInt(loanDuration.slice(0, -1)); // Obtener el número
+      
+      if (unit === 'h') {
+        // Añadir horas
+        calculatedExpectedReturn.setHours(calculatedExpectedReturn.getHours() + value);
+      } else if (unit === 'd') {
+        // Añadir días
+        calculatedExpectedReturn.setDate(calculatedExpectedReturn.getDate() + value);
+      }
+    } 
+    // Si no se proporciona nada, establecer por defecto 3 días
+    else {
+      calculatedExpectedReturn = new Date();
+      calculatedExpectedReturn.setDate(calculatedExpectedReturn.getDate() + 3);
+    }
+
+    // Crear el nuevo préstamo con la fecha calculada
     const newLoan = await Loan.create({
       tool,
       technician: req.user._id,
-      purpose
+      purpose,
+      expectedReturn: calculatedExpectedReturn
     });
 
+    // Actualizar el estado de la herramienta a "prestada"
     await Tool.findByIdAndUpdate(tool, { status: 'borrowed' });
 
     res.status(201).json({ success: true, data: newLoan });
   } catch (error) {
+    console.error('Error al crear préstamo:', error);
     res.status(500).json({ success: false, message: 'Error al crear préstamo', error: error.message });
   }
 };
