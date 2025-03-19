@@ -18,15 +18,34 @@ import Loan from '../models/Loan.js';
 // Obtener todas las herramientas
 export const getTools = async (req, res) => {
   try {
-    let query = Tool.find();
-
+    console.log('Query params recibidos:', req.query);
+    
+    let query = {};
+    
+    // Procesar filtro de categoría
     if (req.query.category) {
-      query = query.where('category').equals(req.query.category);
+      query.category = req.query.category;
     }
-
-    const tools = await query;
+    
+    // Procesar filtro de estado
+    if (req.query.status) {
+      // Si hay múltiples valores para status (viene como array)
+      if (Array.isArray(req.query.status)) {
+        query.status = { $in: req.query.status };
+      } else {
+        query.status = req.query.status;
+      }
+    }
+    
+    console.log('Filtro final para la consulta:', query);
+    
+    const tools = await Tool.find(query);
+    
+    console.log(`Encontradas ${tools.length} herramientas con los filtros aplicados`);
+    
     res.status(200).json({ success: true, count: tools.length, data: tools });
   } catch (error) {
+    console.error('Error al obtener herramientas:', error);
     res.status(500).json({ success: false, message: 'Error al obtener herramientas', error: error.message });
   }
 };
