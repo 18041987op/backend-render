@@ -12,13 +12,23 @@ const ToolSchema = new mongoose.Schema({
   serialNumber: {
     type: String,
     unique: true,
-    sparse: true
+    sparse: true // Permite valores nulos/ausentes sin violar la unicidad
   },
   status: {
     type: String,
     enum: ['available', 'borrowed', 'maintenance', 'damaged'],
     default: 'available'
   },
+  // --- CAMPOS AÑADIDOS ---
+  location: {
+    type: String,
+    required: [true, 'La ubicación es obligatoria'] // Marcado como obligatorio
+  },
+  description: {
+    type: String,
+    default: '' // Por defecto es una cadena vacía si no se proporciona
+  },
+  // --- FIN CAMPOS AÑADIDOS ---
   lastMaintenance: {
     type: Date
   },
@@ -26,7 +36,7 @@ const ToolSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }
-}, { timestamps: true });
+}, { timestamps: true }); // timestamps añade createdAt y updatedAt
 
 const Tool = mongoose.model('Tool', ToolSchema);
 export default Tool;
