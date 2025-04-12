@@ -9,6 +9,7 @@ import userRoutes from './routes/users.js';
 import loanRoutes from './routes/loans.js';
 import notificationRoutes from './routes/notifications.js';
 import './jobs/notificationScheduler.js'; // Import to initialize and schedule the job
+import reportRoutes from './routes/reports.js'; // <-- NUEVA LÍNEA
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ app.use('/api/tools', toolRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/loans', loanRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/reports', reportRoutes); // <-- NUEVA LÍNEA
 
 // Ruta de prueba
 app.get('/', (req, res) => {

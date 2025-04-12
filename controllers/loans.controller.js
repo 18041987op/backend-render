@@ -1,5 +1,5 @@
 import Loan from '../models/Loan.js';
-import Tool from '../models/Tool.js';
+import Tool from '../models/Tool.js'; // Tool model might not be needed directly here anymore
 
 // Obtener todos los préstamos (Sin cambios)
 export const getLoans = async (req, res) => {
@@ -28,7 +28,34 @@ export const getLoans = async (req, res) => {
         limitOption = parseInt(req.query.limit);
     }
 
-    console.log('DEBUG: [getLoans] Query:', query, 'Sort:', sortOption, 'Limit:', limitOption);
+    console.log('DEBUG: [getLoans] Final Query:', query, 'Sort:', sortOption, 'Limit:', limitOption);
+
+    // --- NEW: Handle severely overdue filter ---
+    if (req.query.severelyOverdueDays && !isNaN(parseInt(req.query.severelyOverdueDays))) {
+      const daysOverdue = parseInt(req.query.severelyOverdueDays);
+      if (daysOverdue > 0) {
+          const thresholdDate = new Date();
+          // Set thresholdDate to X days ago (at the beginning of that day)
+          thresholdDate.setDate(thresholdDate.getDate() - daysOverdue);
+          thresholdDate.setHours(0, 0, 0, 0); // Compare against the start of the day X days ago
+
+          // Add the date condition to the query
+          // We also ensure we only look for 'active' loans here implicitly
+          query.expectedReturn = { $lt: thresholdDate };
+          query.status = 'active'; // Ensure we only check active loans for this filter
+          console.log(`[getLoans] Applying filter: severely overdue by ${daysOverdue} days (due before ${thresholdDate.toISOString()})`);
+      }
+  }
+  // --- END NEW FILTER LOGIC ---
+
+  // Ensure status filter is handled correctly if both are passed (severelyOverdue takes precedence for status=active)
+  if (req.query.status && !req.query.severelyOverdueDays) {
+     query.status = req.query.status;
+  } else if (!query.status && !req.query.severelyOverdueDays){
+      // If no status specified at all, maybe default to finding all or active?
+      // Depending on requirements. Let's keep it open for now.
+      // If an admin calls this without params, they might want all loans.
+  }
 
     const loans = await Loan.find(query)
       .populate('tool', 'name category serialNumber location status') // Añadido location y status
