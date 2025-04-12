@@ -5,7 +5,8 @@
     "main": "server.js",
     "type": "module",
     "scripts": {
-        "start": "node server.js"
+        "start": "node server.js",
+        "check-notifications": "node -e \"import('./jobs/notificationScheduler.js').then(module => module.checkLoanNotifications())\""
     },
     "dependencies": {
         "bcryptjs": "^3.0.2",
@@ -14,6 +15,7 @@
         "express": "^4.21.2",
         "jsonwebtoken": "^9.0.2",
         "mongoose": "^7.8.6",
+        "node-cron": "^3.0.3",
         "nodemailer": "^6.10.0"
     }
 }

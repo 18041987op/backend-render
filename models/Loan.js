@@ -35,6 +35,22 @@ const LoanSchema = new mongoose.Schema({
   actualReturn: {
     type: Date
   },
+
+  // --- CAMPOS DE CONTROL DE NOTIFICACIONES ---
+  dueSoonNotified: {
+    type: Boolean,
+    default: false // Notificación "a punto de vencer" (ej. 24h antes)
+  },
+  overdueNotified: {
+    type: Boolean,
+    default: false // Notificación "vencido" para el técnico
+  },
+  adminNotified: {
+    type: Boolean,
+    default: false // Notificación de escalada "vencido" para administradores
+  },
+  // --- FIN CAMPOS DE CONTROL ---
+
   transferHistory: [
     {
       fromTechnician: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

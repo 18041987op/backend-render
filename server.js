@@ -8,6 +8,7 @@ import toolRoutes from './routes/tools.js';
 import userRoutes from './routes/users.js';
 import loanRoutes from './routes/loans.js';
 import notificationRoutes from './routes/notifications.js';
+import './jobs/notificationScheduler.js'; // Import to initialize and schedule the job
 
 dotenv.config();
 
