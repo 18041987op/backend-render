@@ -28,6 +28,13 @@ const ToolSchema = new mongoose.Schema({
     type: String,
     default: '' // Por defecto es una cadena vacía si no se proporciona
   },
+  cost: {
+    type: Number,
+    required: false, // Optional field
+    min: 0,          // Cannot be negative
+    default: 0       // Default to 0 if not provided
+  },
+
   // --- FIN CAMPOS AÑADIDOS ---
   lastMaintenance: {
     type: Date
