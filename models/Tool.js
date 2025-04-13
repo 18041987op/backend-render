@@ -1,49 +1,49 @@
+// backend/models/Tool.js
 import mongoose from 'mongoose';
 
 const ToolSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: [true, 'El nombre de la herramienta es obligatorio']
+    required: [true, 'Tool name is required'] // English validation message
   },
   category: {
     type: String,
-    required: [true, 'La categoría es obligatoria']
+    required: [true, 'Category is required'] // English validation message
   },
   serialNumber: {
     type: String,
-    unique: true,
-    sparse: true // Permite valores nulos/ausentes sin violar la unicidad
+    unique: true, // Keep unique constraint
+    sparse: true // Allows multiple null/missing values without violating uniqueness
   },
   status: {
     type: String,
     enum: ['available', 'borrowed', 'maintenance', 'damaged'],
     default: 'available'
   },
-  // --- CAMPOS AÑADIDOS ---
   location: {
     type: String,
-    required: [true, 'La ubicación es obligatoria'] // Marcado como obligatorio
+    required: [true, 'Location is required'] // English validation message
   },
   description: {
     type: String,
-    default: '' // Por defecto es una cadena vacía si no se proporciona
+    default: ''
   },
+  // --- NEW COST FIELD ---
   cost: {
     type: Number,
-    required: false, // Optional field
-    min: 0,          // Cannot be negative
-    default: 0       // Default to 0 if not provided
+    required: false, // Make it optional for now
+    min: [0, 'Cost cannot be negative'], // English validation message
+    default: 0 // Default to 0 if not provided
   },
-
-  // --- FIN CAMPOS AÑADIDOS ---
+  // --- END NEW COST FIELD ---
   lastMaintenance: {
     type: Date
   },
   addedBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'User' // Reference to the User model
   }
-}, { timestamps: true }); // timestamps añade createdAt y updatedAt
+}, { timestamps: true }); // timestamps adds createdAt and updatedAt
 
 const Tool = mongoose.model('Tool', ToolSchema);
 export default Tool;

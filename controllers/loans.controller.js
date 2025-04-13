@@ -1,5 +1,6 @@
 import Loan from '../models/Loan.js';
 import Tool from '../models/Tool.js'; // Tool model might not be needed directly here anymore
+import User from '../models/User.js'; // Add if not already present
 
 // Obtener todos los préstamos (Sin cambios)
 export const getLoans = async (req, res) => {
@@ -268,6 +269,108 @@ export const getMyLoans = async (req, res) => {
   } catch (error) {
     console.error('Error en getMyLoans:', error);
     res.status(500).json({ success: false, message: 'Error al obtener herramientas prestadas', error: error.message });
+  }
+};
+
+// --- Transfer Loan ---
+export const transferLoan = async (req, res) => {
+  const { id: loanId } = req.params; // Adjusted to use 'id' from the route param
+  // Data from request body: targetTechnician (ID), purpose, vehicle, notes, loanDuration OR expectedReturn
+  const { targetTechnician, purpose, vehicle, notes, loanDuration, expectedReturn } = req.body;
+  const initiatingUserId = req.user._id; // User making the request
+
+  console.log(`[Transfer] Request received for loan ${loanId} to technician ${targetTechnician}`);
+
+  try {
+    const loan = await Loan.findById(loanId);
+
+    if (!loan) {
+      return res.status(404).json({ success: false, message: 'Loan not found' });
+    }
+    if (loan.status !== 'active') {
+      return res.status(400).json({ success: false, message: 'Loan is not active and cannot be transferred' });
+    }
+
+    // Optional: Add validation - e.g., can only the current holder initiate? Or anyone?
+    // For now, we assume the 'protect' middleware ensures a valid user is making the request.
+    // More complex logic could be added here if needed.
+
+    // Validate target technician exists and is active
+    const targetUser = await User.findById(targetTechnician);
+    if (!targetUser || !targetUser.isActive) {
+      return res.status(400).json({ success: false, message: 'Target technician not found or is inactive' });
+    }
+    // Prevent transferring to oneself
+    if (targetUser._id.equals(initiatingUserId)) {
+         return res.status(400).json({ success: false, message: 'Cannot transfer a tool to yourself.' });
+    }
+     // Prevent transferring to the current holder if initiated by someone else (adjust if needed)
+     if (targetUser._id.equals(loan.technician)) {
+          return res.status(400).json({ success: false, message: `Tool is already assigned to ${targetUser.name}.` });
+     }
+
+
+    // Calculate the new expectedReturn date based on input
+    let newExpectedReturnDate;
+    if (expectedReturn) { // Prioritize specific date
+      const date = new Date(expectedReturn);
+      if (isNaN(date.getTime()) || date < new Date().setHours(0,0,0,0) ) {
+         throw new Error("Invalid or past specific return date provided.");
+      }
+      newExpectedReturnDate = date;
+    } else if (loanDuration && loanDuration !== 'custom') {
+      const unit = loanDuration.slice(-1).toLowerCase();
+      const value = parseInt(loanDuration.slice(0, -1));
+      if (isNaN(value) || value <= 0) {
+          throw new Error("Invalid loan duration value.");
+      }
+      newExpectedReturnDate = new Date(); // Start from now for duration calculation
+      if (unit === 'h') newExpectedReturnDate.setHours(newExpectedReturnDate.getHours() + value);
+      else if (unit === 'd') newExpectedReturnDate.setDate(newExpectedReturnDate.getDate() + value);
+      else throw new Error("Invalid loan duration unit (use 'h' or 'd').");
+    } else {
+       // Default if nothing specific is provided (e.g., 3 days from now)
+       newExpectedReturnDate = new Date();
+       newExpectedReturnDate.setDate(newExpectedReturnDate.getDate() + 3);
+       console.log(`[Transfer] No duration/date provided, defaulting to 3 days for loan ${loanId}`);
+    }
+
+    // Prepare transfer history record
+    const transferRecord = {
+      fromTechnician: loan.technician, // Old technician ID
+      toTechnician: targetUser._id,     // New technician ID
+      transferredAt: new Date(),
+      initiatedBy: initiatingUserId,
+      notes: notes || undefined
+    };
+
+    // Update the loan document
+    loan.technician = targetUser._id; // Assign to new technician
+    loan.purpose = purpose; // Update purpose
+    loan.vehicle = vehicle || ''; // Update vehicle
+    loan.expectedReturn = newExpectedReturnDate; // Set new return date
+    // loan.status = 'active'; // It should already be active, but doesn't hurt to ensure
+    loan.transferHistory.push(transferRecord); // Add to history
+
+    // Reset notification flags for the new loan period/technician
+    loan.dueSoonNotified = false;
+    loan.overdueNotified = false;
+    loan.adminNotified = false;
+
+    const updatedLoan = await loan.save();
+
+    // TODO: Optionally create notifications here (e.g., for the targetTechnician, maybe the initiatingUser if different)
+
+    console.log(`[Transfer] Loan ${loanId} successfully transferred to technician ${targetTechnician}`);
+    res.status(200).json({ success: true, message: 'Tool transferred successfully', data: updatedLoan });
+
+  } catch (error) {
+    console.error(`[Transfer] Error transferring loan ${loanId}:`, error);
+     // Handle validation errors specifically
+    if (error.name === 'ValidationError' || error.message.includes("Invalid")) {
+         return res.status(400).json({ success: false, message: error.message });
+    }
+    res.status(500).json({ success: false, message: 'Error transferring tool', error: error.message });
   }
 };
 
