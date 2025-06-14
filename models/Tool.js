@@ -71,9 +71,34 @@ const ToolSchema = new mongoose.Schema({
     default: 'available'
   },
   location: {
-    type: String,
-    required: [true, 'Location is required'] // English validation message
-  },
+  type: String,
+  required: [true, 'Location is required'],
+  enum: [
+    // Diagnostic locations
+    'Gabinete A1', 'Gabinete A2', 'Banco Diagnóstico',
+    // Engine/Transmission locations  
+    'Gabinete C1', 'Zona Motor', 'Banco Motor',
+    // Hand tools locations
+    'Carro Taller 1', 'Carro Taller 2', 'Banco 1', 'Banco 2',
+    // Suspension/Brakes locations
+    'Zona Suspensión', 'Gabinete B2', 'Zona Frenos',
+    // A/C locations
+    'Carro A/C', 'Zona A/C',
+    // Fluids locations
+    'Zona Fluidos',
+    // Electrical/Pneumatic locations
+    'Zona Neumática', 'Zona Eléctrica', 'Zona Carga',
+    // Tires/Wheels locations
+    'Zona Neumáticos', 'Área Ruedas',
+    // Support/Lifting locations
+    'Bahía 1', 'Bahía 2',
+    // Other locations
+    'Almacén General', 'Zona Misceláneos',
+    // Keep your existing locations for compatibility
+    'shelve 1:A', 'main shelve'
+  ],
+  default: 'main shelve'
+},
   description: {
     type: String,
     default: ''
@@ -92,7 +117,16 @@ const ToolSchema = new mongoose.Schema({
   addedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User' // Reference to the User model
+  },
+  comments: {
+    type: String,
+    default: ''
+  },
+  image: {
+    type: String,
+    default: ''
   }
+
 }, { timestamps: true }); // timestamps adds createdAt and updatedAt
 
 const Tool = mongoose.model('Tool', ToolSchema);
