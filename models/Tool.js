@@ -7,7 +7,7 @@ const toolSchema = new mongoose.Schema({
     type: String, 
     required: true,
     enum: [
-      'diagnostico', 'manuales', 'electricas', 'neumaticas',
+      'diagnostico', 'manuales', 'electricas', 'neumaticas', 'electricas_neumaticas',
       'medicion', 'motor_transmision', 'suspension_frenos',
       'aire_acondicionado', 'neumaticos_ruedas', 'manejo_fluidos',
       'elevacion_soporte', 'otros'
