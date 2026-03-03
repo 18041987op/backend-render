@@ -4,11 +4,15 @@ import Loan from '../models/Loan.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js'; // Necesario para notificar a admins
 
-// --- Configuration (Consider moving to environment variables later) ---
-const DUE_SOON_HOURS_BEFORE = 24; // Notify 24 hours before due date
-const ADMIN_ESCALATION_DAYS_OVERDUE = 2; // Notify admins if overdue by 2+ days
-// const CRON_SCHEDULE = '0 9 * * *'; // Run daily at 9 AM (Example for production)
-const CRON_SCHEDULE = '*/10 * * * *'; // Run every 10 minutes (FOR TESTING - ADJUST LATER!)
+// --- Configuración ---
+// CRON_SCHEDULE: expresión cron que controla con qué frecuencia se ejecutan las verificaciones.
+//   Producción recomendada → '0 9 * * *'  (diariamente a las 9 AM)
+//   Desarrollo / pruebas   → '*/10 * * * *' (cada 10 minutos)
+// Define CRON_SCHEDULE y SCHEDULER_TIMEZONE en tu .env para sobrescribir los valores por defecto.
+const DUE_SOON_HOURS_BEFORE       = 24; // Notificar 24 h antes del vencimiento
+const ADMIN_ESCALATION_DAYS_OVERDUE = 2; // Escalar a admin si lleva 2+ días de retraso
+const CRON_SCHEDULE = process.env.CRON_SCHEDULE || '0 9 * * *';
+const SCHEDULER_TIMEZONE = process.env.SCHEDULER_TIMEZONE || 'America/Mexico_City';
 
 // --- Main Scheduler Function ---
 const checkLoanNotifications = async () => {
@@ -119,18 +123,15 @@ const checkLoanNotifications = async () => {
   }
 };
 
-// --- Schedule the Task ---
+// --- Programar la tarea ---
 if (cron.validate(CRON_SCHEDULE)) {
-  console.log(`[Scheduler] Scheduling notification check with schedule: ${CRON_SCHEDULE}`);
+  console.log(`[Scheduler] Tarea programada → "${CRON_SCHEDULE}" (timezone: ${SCHEDULER_TIMEZONE})`);
   cron.schedule(CRON_SCHEDULE, checkLoanNotifications, {
-     scheduled: true,
-     timezone: "America/New_York" // IMPORTANT: Adjust to your timezone
+    scheduled: true,
+    timezone: SCHEDULER_TIMEZONE,
   });
-  // Optional: Run once on startup for immediate testing
-  // console.log('[Scheduler] Running initial check on startup...');
-  // checkLoanNotifications().catch(err => console.error("Initial check failed:", err));
 } else {
-  console.error(`[Scheduler] Error: Invalid CRON schedule expression "${CRON_SCHEDULE}". Task not scheduled.`);
+  console.error(`[Scheduler] Error: expresión cron inválida "${CRON_SCHEDULE}". Tarea no programada.`);
 }
 
 // Export the main function if needed elsewhere (e.g., for manual trigger script)

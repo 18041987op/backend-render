@@ -157,12 +157,17 @@ export const updateToolStatus = async (req, res) => {
       }
     }
 
-    // Update the status
+    // Guardar el estado ANTERIOR antes de actualizarlo
+    const previousStatus = tool.status;
+
     tool.status = status;
-    // If status changes from maintenance/damaged back to available, update lastMaintenance date
-    if (status === 'available' && (tool.status === 'maintenance' || tool.status === 'damaged')) {
-      tool.lastMaintenance = Date.now(); // Record when it became available after repair/check
+
+    // Si la herramienta vuelve a estar disponible después de mantenimiento o daño,
+    // registrar la fecha del servicio completado
+    if (status === 'available' && (previousStatus === 'maintenance' || previousStatus === 'damaged')) {
+      tool.lastMaintenance = Date.now();
     }
+
     await tool.save();
 
     res.status(200).json({ success: true, data: tool });
