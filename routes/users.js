@@ -36,7 +36,9 @@ router.route('/:id')
   .get(protect, authorize('admin'), getUserByIdAsAdmin)
   .put(protect, authorize('admin'), updateUserByAdmin);
 
-// NUEVA RUTA: Para activar/desactivar un usuario (solo admin)
+// Activar/desactivar un usuario (solo admin)
+// Soporta ambas rutas: /admin/:id/status (frontend) y /:id/status (legacy)
+router.patch('/admin/:id/status', protect, authorize('admin'), updateUserStatus);
 router.patch('/:id/status', protect, authorize('admin'), updateUserStatus);
 
 
