@@ -1,59 +1,102 @@
-import Notification from '../models/Notification.js';
+import supabase, { shopId } from '../config/supabase.js';
 
-// Obtener notificaciones del usuario autenticado
+// Get notifications for authenticated user
 export const getMyNotifications = async (req, res) => {
   try {
     if (!req.user) {
       return res.status(403).json({ success: false, message: 'No autorizado' });
     }
 
-    const notifications = await Notification.find({ recipient: req.user._id }).sort('-createdAt');
-    res.status(200).json({ success: true, count: notifications.length, data: notifications });
+    const { data: notifications, error } = await supabase
+      .from('tool_notifications')
+      .select('*')
+      .eq('recipient_id', req.user.id)
+      .eq('shop_id', shopId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const mapped = notifications.map(n => ({ ...n, _id: n.id }));
+    res.status(200).json({ success: true, count: mapped.length, data: mapped });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error al obtener notificaciones', error: error.message });
   }
 };
 
-// Obtener cantidad de notificaciones no leídas
+// Get unread count
 export const getUnreadCount = async (req, res) => {
   try {
-    const count = await Notification.countDocuments({ recipient: req.user._id, read: false });
-    res.status(200).json({ success: true, count });
+    const { count, error } = await supabase
+      .from('tool_notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('recipient_id', req.user.id)
+      .eq('shop_id', shopId)
+      .eq('read', false);
+
+    if (error) throw error;
+
+    res.status(200).json({ success: true, count: count || 0 });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error al obtener conteo de notificaciones', error: error.message });
   }
 };
 
-// Marcar notificación como leída
+// Mark notification as read
 export const markAsRead = async (req, res) => {
   try {
-    let notification = await Notification.findById(req.params.id);
-    if (!notification) return res.status(404).json({ success: false, message: 'Notificación no encontrada' });
+    const { data: notification, error: fetchErr } = await supabase
+      .from('tool_notifications')
+      .select('id, recipient_id')
+      .eq('id', req.params.id)
+      .single();
 
-    if (notification.recipient.toString() !== req.user._id.toString()) {
+    if (fetchErr || !notification) {
+      return res.status(404).json({ success: false, message: 'Notificación no encontrada' });
+    }
+
+    if (notification.recipient_id !== req.user.id) {
       return res.status(403).json({ success: false, message: 'No autorizado para acceder a esta notificación' });
     }
 
-    notification.read = true;
-    await notification.save();
+    const { data: updated, error } = await supabase
+      .from('tool_notifications')
+      .update({ read: true })
+      .eq('id', req.params.id)
+      .select('*')
+      .single();
 
-    res.status(200).json({ success: true, data: notification });
+    if (error) throw error;
+
+    res.status(200).json({ success: true, data: { ...updated, _id: updated.id } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error al marcar notificación como leída', error: error.message });
   }
 };
 
-// **Eliminar una notificación**
+// Delete a notification
 export const deleteNotification = async (req, res) => {
   try {
-    const notification = await Notification.findById(req.params.id);
-    if (!notification) return res.status(404).json({ success: false, message: 'Notificación no encontrada' });
+    const { data: notification, error: fetchErr } = await supabase
+      .from('tool_notifications')
+      .select('id, recipient_id')
+      .eq('id', req.params.id)
+      .single();
 
-    if (notification.recipient.toString() !== req.user._id.toString()) {
+    if (fetchErr || !notification) {
+      return res.status(404).json({ success: false, message: 'Notificación no encontrada' });
+    }
+
+    if (notification.recipient_id !== req.user.id) {
       return res.status(403).json({ success: false, message: 'No autorizado para eliminar esta notificación' });
     }
 
-    await notification.deleteOne();
+    const { error } = await supabase
+      .from('tool_notifications')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+
     res.status(200).json({ success: true, data: {} });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error al eliminar notificación', error: error.message });

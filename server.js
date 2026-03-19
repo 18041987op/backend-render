@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import connectDB from './config/database.js';
+import { connectDB } from './config/supabase.js';
 
 import toolRoutes         from './routes/tools.js';
 import userRoutes         from './routes/users.js';
@@ -16,16 +16,12 @@ dotenv.config();
 const app = express();
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
-// Solo se aceptan peticiones del dominio del frontend.
-// Agrega a CLIENT_URL los orígenes válidos separados por coma si tienes varios,
-// o usa una lista fija. En desarrollo el valor es http://localhost:3000.
 const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
   .split(',')
   .map(o => o.trim());
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir peticiones sin origin (Postman, curl, mismo servidor)
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -39,7 +35,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// ─── Rutas ────────────────────────────────────────────────────────────────────
+// ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/tools',         toolRoutes);
 app.use('/api/users',         userRoutes);
 app.use('/api/loans',         loanRoutes);
@@ -48,10 +44,10 @@ app.use('/api/reports',       reportRoutes);
 app.use('/api/upload',        uploadRoutes);
 
 app.get('/', (req, res) => {
-  res.send('✅ Backend funcionando correctamente 🚀');
+  res.send('✅ Backend funcionando correctamente — Supabase 🚀');
 });
 
-// ─── Arranque ─────────────────────────────────────────────────────────────────
+// ─── Startup ──────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 connectDB()
   .then(() => {

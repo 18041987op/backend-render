@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import supabase, { shopId } from '../config/supabase.js';
 
-// Middleware para proteger rutas con JWT
+// Middleware to protect routes with JWT
 export const protect = async (req, res, next) => {
   let token;
 
@@ -19,15 +19,30 @@ export const protect = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await User.findById(decoded.id);
-    if (!user) {
+    const { data: user, error } = await supabase
+      .from('tools_users')
+      .select('id, name, email, role, is_active')
+      .eq('id', decoded.id)
+      .eq('shop_id', shopId)
+      .single();
+
+    if (error || !user) {
       return res.status(401).json({
         success: false,
         message: 'Usuario no encontrado con este token',
       });
     }
 
-    req.user = user;
+    if (!user.is_active) {
+      return res.status(401).json({
+        success: false,
+        message: 'Tu cuenta está desactivada. Contacta al administrador.',
+      });
+    }
+
+    // Normalize user object so controllers can use user.id consistently
+    // Also add _id alias for any code that still references it
+    req.user = { ...user, _id: user.id };
     next();
   } catch (err) {
     return res.status(401).json({
@@ -38,7 +53,7 @@ export const protect = async (req, res, next) => {
   }
 };
 
-// Middleware para verificar roles
+// Middleware to verify roles
 export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {

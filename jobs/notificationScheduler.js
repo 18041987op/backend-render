@@ -1,138 +1,121 @@
-// backend/jobs/notificationScheduler.js
 import cron from 'node-cron';
-import Loan from '../models/Loan.js';
-import Notification from '../models/Notification.js';
-import User from '../models/User.js'; // Necesario para notificar a admins
+import supabase, { shopId } from '../config/supabase.js';
 
-// --- Configuración ---
-// CRON_SCHEDULE: expresión cron que controla con qué frecuencia se ejecutan las verificaciones.
-//   Producción recomendada → '0 9 * * *'  (diariamente a las 9 AM)
-//   Desarrollo / pruebas   → '*/10 * * * *' (cada 10 minutos)
-// Define CRON_SCHEDULE y SCHEDULER_TIMEZONE en tu .env para sobrescribir los valores por defecto.
-const DUE_SOON_HOURS_BEFORE       = 24; // Notificar 24 h antes del vencimiento
-const ADMIN_ESCALATION_DAYS_OVERDUE = 2; // Escalar a admin si lleva 2+ días de retraso
+const DUE_SOON_HOURS_BEFORE = 24;
+const ADMIN_ESCALATION_DAYS_OVERDUE = 2;
 const CRON_SCHEDULE = process.env.CRON_SCHEDULE || '0 9 * * *';
 const SCHEDULER_TIMEZONE = process.env.SCHEDULER_TIMEZONE || 'America/Mexico_City';
 
-// --- Main Scheduler Function ---
 const checkLoanNotifications = async () => {
   const now = new Date();
   console.log(`[${now.toISOString()}] Running loan notification check...`);
 
   try {
-    // 1. Find all active loans and populate necessary details
-    const activeLoans = await Loan.find({ status: 'active' })
-      .populate('technician', '_id name email')
-      .populate('tool', '_id name');
+    // Get all active loans with tool and technician info
+    const { data: activeLoans, error: loansErr } = await supabase
+      .from('tool_loans')
+      .select('id, tool_id, technician_id, expected_return, due_soon_notified, overdue_notified, admin_notified')
+      .eq('shop_id', shopId)
+      .eq('status', 'active');
+
+    if (loansErr) throw loansErr;
 
     console.log(`[Scheduler] Found ${activeLoans.length} active loans to check.`);
 
-    // Find all admin users ONCE to avoid multiple DB calls inside loop
-    let adminUsers = [];
-    try {
-        adminUsers = await User.find({ role: 'admin', isActive: true }).select('_id'); // Get only IDs of active admins
-        console.log(`[Scheduler] Found ${adminUsers.length} active admin user(s) for potential escalation notifications.`);
-    } catch(adminErr) {
-        console.error("[Scheduler] Error fetching admin users:", adminErr);
-        // Continue without admin notifications if fetching fails
-    }
+    // Get admin user IDs
+    const { data: admins } = await supabase
+      .from('tools_users')
+      .select('id')
+      .eq('shop_id', shopId)
+      .eq('role', 'admin')
+      .eq('is_active', true);
 
+    const adminIds = (admins || []).map(a => a.id);
 
-    // Process each loan individually
-    // We use a standard loop here for clarity, could use Promise.all for slight parallelization
+    // Pre-fetch tool and technician names
+    const toolIds = [...new Set(activeLoans.map(l => l.tool_id))];
+    const techIds = [...new Set(activeLoans.map(l => l.technician_id))];
+
+    const { data: tools } = await supabase.from('tools').select('id, name').in('id', toolIds);
+    const { data: techs } = await supabase.from('tools_users').select('id, name').in('id', techIds);
+
+    const toolMap = Object.fromEntries((tools || []).map(t => [t.id, t.name]));
+    const techMap = Object.fromEntries((techs || []).map(t => [t.id, t.name]));
+
     for (const loan of activeLoans) {
-      // Skip if essential data is missing
-      if (!loan.tool || !loan.technician) {
-        console.warn(`[Scheduler] Skipping loan ${loan._id} due to missing populated tool or technician data.`);
-        continue; // Go to the next loan
+      const toolName = toolMap[loan.tool_id] || 'Unknown Tool';
+      const techName = techMap[loan.technician_id] || 'Unknown';
+      const expectedReturn = new Date(loan.expected_return);
+
+      // Check 1: Overdue notification (for technician)
+      if (expectedReturn < now && !loan.overdue_notified) {
+        const message = `ALERTA: La herramienta "${toolName}" está vencida (debía devolverse el ${expectedReturn.toLocaleDateString()}). Por favor devuélvala.`;
+        await supabase.from('tool_notifications').insert({
+          shop_id: shopId,
+          recipient_id: loan.technician_id,
+          message,
+          type: 'error',
+          related_model: 'Loan',
+          related_id: loan.id,
+        });
+        await supabase.from('tool_loans').update({ overdue_notified: true }).eq('id', loan.id);
+        console.log(`[Scheduler] OVERDUE: Loan ${loan.id} for "${toolName}"`);
       }
 
-      const technicianId = loan.technician._id;
-      const toolName = loan.tool.name;
-      const loanId = loan._id;
-      const expectedReturnDate = loan.expectedReturn;
-
-      // --- Check 1: Overdue Notification (for Technician) ---
-      if (expectedReturnDate < now && !loan.overdueNotified) {
-        console.log(`[Scheduler] OVERDUE: Loan ${loanId} for "${toolName}". Notifying technician ${technicianId}.`);
-        const message = `ALERT: The tool "${toolName}" is overdue (was due on ${expectedReturnDate.toLocaleDateString()}). Please return it promptly.`;
-        try {
-          await Notification.create({
-            recipient: technicianId, title: 'Loan Overdue', message: message, type: 'error', relatedTo: { model: 'Loan', id: loanId }
+      // Check 2: Due soon notification (for technician)
+      else if (expectedReturn > now && !loan.due_soon_notified) {
+        const threshold = new Date(now.getTime() + DUE_SOON_HOURS_BEFORE * 60 * 60 * 1000);
+        if (expectedReturn < threshold) {
+          const message = `RECORDATORIO: La herramienta "${toolName}" debe devolverse el ${expectedReturn.toLocaleDateString()} a las ${expectedReturn.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`;
+          await supabase.from('tool_notifications').insert({
+            shop_id: shopId,
+            recipient_id: loan.technician_id,
+            message,
+            type: 'info',
+            related_model: 'Loan',
+            related_id: loan.id,
           });
-          await Loan.findByIdAndUpdate(loanId, { overdueNotified: true });
-          console.log(`[Scheduler] Overdue notification created and loan ${loanId} marked.`);
-        } catch (err) {
-          console.error(`[Scheduler] Failed processing overdue notification for loan ${loanId}:`, err);
+          await supabase.from('tool_loans').update({ due_soon_notified: true }).eq('id', loan.id);
+          console.log(`[Scheduler] DUE SOON: Loan ${loan.id} for "${toolName}"`);
         }
       }
 
-      // --- Check 2: Due Soon Notification (for Technician) ---
-      else if (expectedReturnDate > now && !loan.dueSoonNotified) { // Only check if not already overdue
-        const dueSoonThreshold = new Date(now.getTime() + DUE_SOON_HOURS_BEFORE * 60 * 60 * 1000);
-        if (expectedReturnDate < dueSoonThreshold) {
-          console.log(`[Scheduler] DUE SOON: Loan ${loanId} for "${toolName}". Notifying technician ${technicianId}.`);
-          const message = `REMINDER: The tool "${toolName}" is due on ${expectedReturnDate.toLocaleDateString()} at ${expectedReturnDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`;
-          try {
-            await Notification.create({
-              recipient: technicianId, title: 'Loan Due Soon', message: message, type: 'info', relatedTo: { model: 'Loan', id: loanId }
-            });
-            await Loan.findByIdAndUpdate(loanId, { dueSoonNotified: true });
-            console.log(`[Scheduler] Due soon notification created and loan ${loanId} marked.`);
-          } catch (err) {
-            console.error(`[Scheduler] Failed processing due soon notification for loan ${loanId}:`, err);
-          }
-        }
-      }
-
-      // --- Check 3: Overdue Escalation (for Admins) ---
-      // This check is independent of the technician notification, but only runs if overdue
-      if (expectedReturnDate < now && !loan.adminNotified) {
+      // Check 3: Admin escalation
+      if (expectedReturn < now && !loan.admin_notified) {
         const escalationThreshold = new Date(now.getTime() - ADMIN_ESCALATION_DAYS_OVERDUE * 24 * 60 * 60 * 1000);
-        if (expectedReturnDate < escalationThreshold) {
-          console.log(`[Scheduler] ESCALATION: Loan ${loanId} for "${toolName}" to tech ${loan.technician.name} is overdue by ${ADMIN_ESCALATION_DAYS_OVERDUE}+ days. Notifying admins.`);
-
-          // Create notification promises for all admins
-          const adminNotificationPromises = adminUsers.map(admin => {
-            const message = `ESCALATION: Loan for "${toolName}" to technician "${loan.technician.name}" is overdue by ${ADMIN_ESCALATION_DAYS_OVERDUE}+ days (due ${expectedReturnDate.toLocaleDateString()}).`;
-            return Notification.create({
-              recipient: admin._id, title: 'Overdue Loan Escalation', message: message, type: 'warning', relatedTo: { model: 'Loan', id: loanId }
-            }).catch(err => { // Catch errors per-admin notification
-                 console.error(`[Scheduler] Failed creating escalation notification for admin ${admin._id} regarding loan ${loanId}:`, err);
-             });
-          });
-
-          try {
-              // Wait for all admin notifications for THIS loan to be processed
-              await Promise.all(adminNotificationPromises);
-              // Only mark the loan if notifications were attempted (even if some failed)
-              await Loan.findByIdAndUpdate(loanId, { adminNotified: true });
-              console.log(`[Scheduler] Admin escalation notifications sent/attempted and loan ${loanId} marked.`);
-          } catch (err) {
-              // This catch is mainly for the findByIdAndUpdate error
-              console.error(`[Scheduler] Failed marking admin notified for loan ${loanId}:`, err);
+        if (expectedReturn < escalationThreshold) {
+          for (const adminId of adminIds) {
+            const message = `ESCALACIÓN: Préstamo de "${toolName}" al técnico "${techName}" lleva ${ADMIN_ESCALATION_DAYS_OVERDUE}+ días vencido (vencía ${expectedReturn.toLocaleDateString()}).`;
+            await supabase.from('tool_notifications').insert({
+              shop_id: shopId,
+              recipient_id: adminId,
+              message,
+              type: 'warning',
+              related_model: 'Loan',
+              related_id: loan.id,
+            });
           }
+          await supabase.from('tool_loans').update({ admin_notified: true }).eq('id', loan.id);
+          console.log(`[Scheduler] ESCALATION: Loan ${loan.id} for "${toolName}" to ${techName}`);
         }
       }
-    } // End of loan loop
-
+    }
   } catch (error) {
-    console.error('[Scheduler] Critical error during notification check run:', error);
+    console.error('[Scheduler] Critical error:', error);
   } finally {
-      console.log(`[${new Date().toISOString()}] Notification check run finished.`);
+    console.log(`[${new Date().toISOString()}] Notification check finished.`);
   }
 };
 
-// --- Programar la tarea ---
+// Schedule the task
 if (cron.validate(CRON_SCHEDULE)) {
-  console.log(`[Scheduler] Tarea programada → "${CRON_SCHEDULE}" (timezone: ${SCHEDULER_TIMEZONE})`);
+  console.log(`[Scheduler] Tarea programada: "${CRON_SCHEDULE}" (timezone: ${SCHEDULER_TIMEZONE})`);
   cron.schedule(CRON_SCHEDULE, checkLoanNotifications, {
     scheduled: true,
     timezone: SCHEDULER_TIMEZONE,
   });
 } else {
-  console.error(`[Scheduler] Error: expresión cron inválida "${CRON_SCHEDULE}". Tarea no programada.`);
+  console.error(`[Scheduler] Error: expresión cron inválida "${CRON_SCHEDULE}".`);
 }
 
-// Export the main function if needed elsewhere (e.g., for manual trigger script)
 export { checkLoanNotifications };

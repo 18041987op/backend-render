@@ -1,5 +1,6 @@
-// backend/controllers/upload.controller.js
+// upload.controller.js — Cloudinary upload stays the same, just update tool in Supabase
 import { uploadBuffer } from '../config/cloudinary.js';
+import supabase, { shopId } from '../config/supabase.js';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -29,12 +30,18 @@ export const uploadToolImage = async (req, res) => {
       transformation: [{ quality: 'auto', fetch_format: 'auto' }],
     });
 
+    // Also update the tool's image_url in Supabase
+    await supabase
+      .from('tools')
+      .update({ image_url: result.secure_url })
+      .eq('id', toolId)
+      .eq('shop_id', shopId);
+
     res.status(200).json({
       success: true,
       url: result.secure_url,
       message: 'Imagen subida exitosamente',
     });
-
   } catch (error) {
     console.error('Error subiendo imagen a Cloudinary:', error);
     res.status(500).json({ success: false, message: 'Error al subir la imagen', error: error.message });
